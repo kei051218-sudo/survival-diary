@@ -118,8 +118,8 @@ async function send(override, isChoice) {
   try {
     if (cur.setupStep < 4) { await setup(text, cur); return; }
     const apiText = isChoice
-      ? `[선택: ${text}] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.`
-      : text;
+  ? '[선택: ' + text + '] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.'
+  : text;
     const { text: raw, msgs } = await callAPI(apiText, cur);
       const { clean, choices, report } = parseResp(raw);
       const ns = { ...cur, messages: msgs, stepIndex: Math.min(cur.stepIndex + 1, cur.totalSteps - 1) };
