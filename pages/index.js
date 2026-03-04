@@ -81,7 +81,7 @@ export default function Home() {
     }]);
   }, []);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [log, typing]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [log, typing]);
 
   async function callAPI(msg, s) {
     const msgs = [...s.messages, { role: 'user', content: msg }];
@@ -176,7 +176,7 @@ export default function Home() {
       ::-webkit-scrollbar-thumb{background:#3a3020}
     `}</style>
 
-    <div style={{ maxWidth: 720, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', padding: '0 16px' }}>
+    <div style={{ maxWidth: 720, margin: '0 auto', height: '100dvh', display: 'flex', flexDirection: 'column', padding: '0 16px', overflow: 'hidden' }}>
       <header style={{ padding: '32px 0 24px', borderBottom: '1px solid #2a2a26', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontFamily: "'Nanum Myeongjo',serif", fontSize: 22, fontWeight: 800, color: '#c8932a', letterSpacing: 2 }}>
           생존일기
@@ -191,7 +191,7 @@ export default function Home() {
         <div style={{ height: '100%', background: 'linear-gradient(90deg,#8a6420,#c8932a)', width: prog + '%', transition: 'width .5s ease' }} />
       </div>
 
-      <div style={{ flex: 1, padding: '28px 0', display: 'flex', flexDirection: 'column', minHeight: 200, maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+      <div style={{ flex: 1, padding: '28px 0', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto', paddingBottom: '8px', overflowY: 'auto' }}>
         {log.map((m, i) => (
           <div key={i}>
             <div className="fin" style={{ display: 'flex', gap: 14, padding: '16px 0', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
@@ -249,7 +249,7 @@ export default function Home() {
         </div>
       )}
 
-      <div style={{ borderTop: '1px solid #2a2a26', padding: '20px 0', display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+      <div style={{ borderTop: '1px solid #2a2a26', padding: '12px 0', display: 'flex', gap: 12, alignItems: 'flex-end', position: 'sticky', bottom: 0, background: '#0a0a08', zIndex: 10 }}>
         <div style={{ flex: 1 }}>
           <textarea value={input}
             onChange={e => { setInput(e.target.value); e.target.style.height = ''; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'; }}
