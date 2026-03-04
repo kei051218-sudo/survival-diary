@@ -107,17 +107,20 @@ export default function Home() {
     return { clean, choices, report };
   }
 
-  async function send(override) {
-    const text = (override !== undefined ? override : input).trim();
-    if (!text || typing) return;
-    setInput('');
-    if (CRISIS.some(k => text.includes(k))) setCrisis(true);
-    setLog(p => [...p, { role: 'user', text }]);
-    setTyping(true);
-    const cur = st;
-    try {
-      if (cur.setupStep < 4) { await setup(text, cur); return; }
-      const { text: raw, msgs } = await callAPI(text, cur);
+async function send(override, isChoice) {
+  const text = (override !== undefined ? override : input).trim();
+  if (!text || typing) return;
+  setInput('');
+  if (CRISIS.some(k => text.includes(k))) setCrisis(true);
+  setLog(p => [...p, { role: 'user', text }]);
+  setTyping(true);
+  const cur = st;
+  try {
+    if (cur.setupStep < 4) { await setup(text, cur); return; }
+    const apiText = isChoice
+      ? `[선택: ${text}] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.`
+      : text;
+    const { text: raw, msgs } = await callAPI(apiText, cur);
       const { clean, choices, report } = parseResp(raw);
       const ns = { ...cur, messages: msgs, stepIndex: Math.min(cur.stepIndex + 1, cur.totalSteps - 1) };
       setSt(ns);
@@ -142,7 +145,10 @@ export default function Home() {
       ns = { ...ns, character: { ...ns.character, survival_reason: answer }, setupStep: 4, currentDay: 1 };
       try {
         const prompt = '캐릭터 생성 완료. 이름:' + ns.character.name + ', 직업:' + ns.character.job + ', 생존계기:' + answer + '. 1일차 스토리 시작. 지하실에서 눈을 뜨는 장면부터, 캐릭터 정보를 자연스럽게 녹여서, 첫 번째 상황만 진행. 마크다운 없이 순수 텍스트만.';
-        const { text: raw, msgs } = await callAPI(prompt, ns);
+        const apiText = isChoice
+  ? `[선택: ${txt}] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.`
+  : txt;
+const { text: raw, msgs } = await callAPI(apiText, s);
         const { clean, choices } = parseResp(raw);
         ns.messages = msgs;
         msg = { role: 'assistant', text: clean, choices };
@@ -211,7 +217,7 @@ export default function Home() {
             {m.choices && m.choices.length > 0 && (
               <div style={{ padding: '8px 0 16px 46px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {m.choices.map((c, ci) => (
-                  <button key={ci} className="cbtn" onClick={() => send(c)} disabled={typing}
+                  <button key={ci} className="cbtn" onClick={() => send(c, true)} disabled={typing}
                     style={{ background: (c === '했어요' || c === '아직') ? 'rgba(200,147,42,.06)' : 'transparent', border: '1px solid #3a3020', color: '#8a6420', padding: '8px 16px', fontFamily: (c === '했어요' || c === '아직') ? "'Share Tech Mono',monospace" : "'Nanum Myeongjo',serif", fontSize: (c === '했어요' || c === '아직') ? 12 : 13, cursor: 'pointer', letterSpacing: (c === '했어요' || c === '아직') ? 1 : .5 }}>
                     {c}
                   </button>
