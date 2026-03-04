@@ -146,7 +146,7 @@ async function send(override, isChoice) {
       try {
         const prompt = '캐릭터 생성 완료. 이름:' + ns.character.name + ', 직업:' + ns.character.job + ', 생존계기:' + answer + '. 1일차 스토리 시작. 지하실에서 눈을 뜨는 장면부터, 캐릭터 정보를 자연스럽게 녹여서, 첫 번째 상황만 진행. 마크다운 없이 순수 텍스트만.';
         const apiText = isChoice
-  ? `[선택: ${txt}] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.`
+  ? '[선택:' ${txt}'] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.'
   : txt;
 const { text: raw, msgs } = await callAPI(apiText, s);
         const { clean, choices } = parseResp(raw);
