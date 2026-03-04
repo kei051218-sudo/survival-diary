@@ -23,41 +23,34 @@ function parseChoices(content) {
 
 function buildSystemPrompt(state) {
   const c = state.character;
-  return `당신은 좀비 아포칼립스 세계관 속 개인 기록 코치이자 따뜻한 동행자입니다.
-
-캐릭터 정보 (항상 유지)
-- 이름: ${c.name || '(미설정)'}
-- 직업: ${c.job || '(미설정)'}
-- 생존 계기: ${c.survival_reason || '(미설정)'}
-- 현재 일차: ${state.currentDay}일차
-
-역할 규칙
-1. 아포칼립스 배경에서 상황을 3문장 이상 묘사하며 긴장과 몰입을 준다.
-2. 플레이어 답변에 따뜻하고 인간적인 피드백을 한다. 과도하게 긍정적이지 않게.
-3. 마이크로 액션이라는 단어를 직접 사용하지 않는다.
-4. 하루 마무리엔 오늘도 당신은 훌륭히 살아남았습니다. 내일 이어집니다. 로 끝낸다.
-5. 볼드나 이탤릭 마크다운을 절대 사용하지 않는다. 순수 텍스트만.
-6. 실행 확인은 [했어요] / [아직], 스토리 선택지는 [선택지1] / [선택지2] 형태.
-7. 리포트 완성시 맨 끝에 [REPORT]{"step":"...","action":"...","done":true,"one_line":"...","coach_note":"..."} 포함.
-8. 이 앱의 핵심 목적: 고립되고 지쳐있는 청년들이 아포칼립스 스토리를 통해 현실에서 작은 행동을 실제로 이행하며 조금씩 나아지도록 돕는 것이다.
-9. 가장 중요한 규칙 - 스토리 행동과 현실 행동의 1:1 연결:
-   선택지를 고른 직후, 스토리 전개 전에 반드시 현실의 나에게 대응되는 구체적인 마이크로 액션을 먼저 제안하고 이행을 기다린다.
-   현실 행동은 지금 당장 몸을 움직여 할 수 있는 아주 작고 구체적인 것이어야 한다.
-   예시 매핑:
-   * 핸드폰을 확인한다 → "지금 핸드폰을 열어보세요. 가장 최근에 연락한 사람이 누구인가요? 이름만 알려줘도 좋아요."
-   * 공구함을 뒤진다 → "지금 가장 가까이 있는 서랍이나 가방을 열어보세요. 안에서 지금 나에게 소중하게 느껴지는 물건을 하나 꺼내보세요."
-   * 상자들을 확인한다 → "지금 주변을 둘러보세요. 오랫동안 열어보지 않은 것이 있나요? 상자가 아니어도 괜찮아요. 책, 노트도 좋아요. 무엇이든 하나를 찾아 열어볼가요?"
-   * 위층 소리를 듣는다 → "지금 잠깐 눈을 감고 주변 소리에 집중해보세요. 지금 들리는 소리 중 가장 편안한 소리는 무엇인가요?"
-   * 탈출 경로를 파악한다 → "지금 있는 공간의 문이나 창문이 몇 개인지 세어보세요."
-   * 물을 찾는다 → "지금 일어나서 부엌이나 화장실로 가 물 한 잔을 가져와보세요."
-   * 잠자리를 찾는다 → "지금 가장 편안한 자세를 찾아보세요. 베개나 쿠션이 있다면 당겨도 좋아요."
-   * 식량을 찾는다 → "지금 냉장고나 찬장을 열어보세요. 먹을 수 있는 게 있나요? 하나만 꺼내 드세요."
-   * 주변을 관찰한다 → "창밖을 한번 내다보세요. 지금 밖에 보이는 것 중 하나를 말해줄 수 있나요?"
-   * 쉬기로 한다 → "잠깐 눈을 감고 코로 숨을 들이쉬고 입으로 천천히 내쉬어보세요. 세 번만요."
-   위 예시에 없는 행동도 같은 방식으로, 지금 몸을 실제로 움직여 할 수 있는 현실 행동으로 반드시 변환한다.
-   현실 행동 제안 후 [했어요] / [아직] 으로 확인한다.
-
-10. AI는 따뜻하고 조용한 인도자처럼 말한다. 강요하지 않고, 판단하지 않으며, 작은 행동 하나하나를 진심으로 응원한다. "잘했어요" 보다는 "그거면 충분해요", "대단해요" 보다는 "그 한 걸음이 오늘의 생존이에요" 같은 표현을 쓴다.
+  return '당신은 좀비 아포칼립스 세계관 속 생존 보조 시스템입니다.\n\n'
+    + '캐릭터 정보 (항상 유지)\n'
+    + '- 이름: ' + (c.name || '(미설정)') + '\n'
+    + '- 직업: ' + (c.job || '(미설정)') + '\n'
+    + '- 생존 계기: ' + (c.survival_reason || '(미설정)') + '\n'
+    + '- 현재 일차: ' + state.currentDay + '일차\n\n'
+    + '역할 규칙\n'
+    + '1. 항상 3인칭 관찰자 시점을 유지한다. "당신은", 이름+"은/는" 처럼 3인칭으로 서술하며, "나는", "저는" 같은 1인칭을 절대 사용하지 않는다.\n'
+    + '2. AI는 생존 보조 시스템처럼 건조하고 관찰적인 톤을 유지하되, 차갑지 않고 따뜻한 온기가 느껴지게 한다.\n'
+    + '3. 아포칼립스 배경에서 상황을 3문장 이상 묘사하며 긴장과 몰입을 준다.\n'
+    + '4. 마이크로 액션이라는 단어를 직접 사용하지 않는다.\n'
+    + '5. 하루 마무리엔 오늘도 살아남았습니다. 내일 이어집니다. 로 끝낸다.\n'
+    + '6. 볼드나 이탤릭 마크다운을 절대 사용하지 않는다. 순수 텍스트만.\n'
+    + '7. 실행 확인은 [했어요] / [아직], 스토리 선택지는 [선택지1] / [선택지2] 형태.\n'
+    + '8. 리포트 완성시 맨 끝에 [REPORT]{"step":"...","action":"...","done":true,"one_line":"...","coach_note":"..."} 포함.\n'
+    + '9. 이 앱의 핵심 목적: 고립되고 지쳐있는 청년들이 아포칼립스 스토리를 통해 현실에서 작은 행동을 실제로 이행하며 조금씩 나아지도록 돕는 것이다.\n'
+    + '10. 가장 중요한 규칙 - [선택:...] 태그가 포함된 메시지를 받으면, 스토리 전개 전에 반드시 그 선택에 대응하는 현실의 구체적인 행동을 먼저 제안하고 [했어요]/[아직]으로 확인한다.\n'
+    + '현실 행동 예시:\n'
+    + '핸드폰 확인 -> 지금 핸드폰을 열어보세요. 가장 최근에 연락한 사람이 누구인가요?\n'
+    + '공구함/서랍 뒤지기 -> 지금 가장 가까이 있는 서랍이나 가방을 열어보세요. 소중하게 느껴지는 물건을 하나 꺼내보세요.\n'
+    + '물 찾기 -> 지금 일어나서 물 한 잔을 가져와보세요.\n'
+    + '주변 관찰 -> 창밖을 한번 내다보세요. 지금 밖에 보이는 것 중 하나를 말해줄 수 있나요?\n'
+    + '잠자리 찾기 -> 지금 가장 편안한 자세를 찾아보세요.\n'
+    + '휴식 -> 잠깐 눈을 감고 코로 숨을 들이쉬고 입으로 천천히 내쉬어보세요. 세 번만요.\n'
+    + '위 예시에 없는 행동도 같은 방식으로 현실의 몸, 감각, 공간과 연결한다.\n'
+    + '11. AI는 따뜻하고 조용한 인도자처럼 말한다. 강요하지 않고, 판단하지 않으며, 작은 행동 하나하나를 진심으로 응원한다.\n\n'
+    + '스토리라인: 1일차(지하실탈출) 2일차(폐허거리) 3일차(무너진다리) 4일차(버려진병원) 5일차(폐허도서관) 6일차(생존자흔적) 7일차(생존자무리)\n'
+    + '항상 한국어, 짧고 명확한 문장.';
 }
 
 const CRISIS = ['자살', '자해', '죽고 싶', '끝내고 싶', '살기 싫', '사라지고 싶'];
@@ -107,20 +100,20 @@ export default function Home() {
     return { clean, choices, report };
   }
 
-async function send(override, isChoice) {
-  const text = (override !== undefined ? override : input).trim();
-  if (!text || typing) return;
-  setInput('');
-  if (CRISIS.some(k => text.includes(k))) setCrisis(true);
-  setLog(p => [...p, { role: 'user', text }]);
-  setTyping(true);
-  const cur = st;
-  try {
-    if (cur.setupStep < 4) { await setup(text, cur); return; }
-    const apiText = isChoice
-  ? '[선택: ' + text + '] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.'
-  : text;
-    const { text: raw, msgs } = await callAPI(apiText, cur);
+  async function send(override, isChoice) {
+    const text = (override !== undefined ? override : input).trim();
+    if (!text || typing) return;
+    setInput('');
+    if (CRISIS.some(k => text.includes(k))) setCrisis(true);
+    setLog(p => [...p, { role: 'user', text }]);
+    setTyping(true);
+    const cur = st;
+    try {
+      if (cur.setupStep < 4) { await setup(text, cur); return; }
+      const apiText = isChoice
+        ? '[선택: ' + text + '] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.'
+        : text;
+      const { text: raw, msgs } = await callAPI(apiText, cur);
       const { clean, choices, report } = parseResp(raw);
       const ns = { ...cur, messages: msgs, stepIndex: Math.min(cur.stepIndex + 1, cur.totalSteps - 1) };
       setSt(ns);
@@ -180,7 +173,7 @@ async function send(override, isChoice) {
     `}</style>
 
     <div style={{ maxWidth: 720, margin: '0 auto', height: '100dvh', display: 'flex', flexDirection: 'column', padding: '0 16px', overflow: 'hidden' }}>
-      <header style={{ padding: '32px 0 24px', borderBottom: '1px solid #2a2a26', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <header style={{ padding: '28px 0 20px', borderBottom: '1px solid #2a2a26', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div style={{ fontFamily: "'Nanum Myeongjo',serif", fontSize: 22, fontWeight: 800, color: '#c8932a', letterSpacing: 2 }}>
           생존일기
           <span style={{ color: '#7a766c', fontWeight: 400, fontSize: 13, marginLeft: 12, letterSpacing: 1, fontFamily: "'Share Tech Mono',monospace" }}>SURVIVAL DIARY</span>
@@ -190,14 +183,14 @@ async function send(override, isChoice) {
         </div>
       </header>
 
-      <div style={{ height: 2, background: '#2a2a26', margin: '0 -16px', overflow: 'hidden' }}>
+      <div style={{ height: 2, background: '#2a2a26', margin: '0 -16px', overflow: 'hidden', flexShrink: 0 }}>
         <div style={{ height: '100%', background: 'linear-gradient(90deg,#8a6420,#c8932a)', width: prog + '%', transition: 'width .5s ease' }} />
       </div>
 
-      <div style={{ flex: 1, padding: '28px 0', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto', paddingBottom: '8px', overflowY: 'auto' }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '8px', paddingTop: '16px' }}>
         {log.map((m, i) => (
           <div key={i}>
-            <div className="fin" style={{ display: 'flex', gap: 14, padding: '16px 0', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
+            <div className="fin" style={{ display: 'flex', gap: 14, padding: '12px 0', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
               <div style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.role === 'user' ? 'rgba(61,110,74,.15)' : 'rgba(200,147,42,.1)', border: '1px solid ' + (m.role === 'user' ? 'rgba(61,110,74,.3)' : '#3a3020'), color: m.role === 'user' ? '#6aaf7a' : '#c8932a', fontFamily: "'Share Tech Mono',monospace", fontSize: 10 }}>
                 {m.role === 'user' ? '나' : 'AI'}
               </div>
@@ -212,7 +205,7 @@ async function send(override, isChoice) {
               </div>
             </div>
             {m.choices && m.choices.length > 0 && (
-              <div style={{ padding: '8px 0 16px 46px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ padding: '4px 0 12px 46px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {m.choices.map((c, ci) => (
                   <button key={ci} className="cbtn" onClick={() => send(c, true)} disabled={typing}
                     style={{ background: (c === '했어요' || c === '아직') ? 'rgba(200,147,42,.06)' : 'transparent', border: '1px solid #3a3020', color: '#8a6420', padding: '8px 16px', fontFamily: (c === '했어요' || c === '아직') ? "'Share Tech Mono',monospace" : "'Nanum Myeongjo',serif", fontSize: (c === '했어요' || c === '아직') ? 12 : 13, cursor: 'pointer', letterSpacing: (c === '했어요' || c === '아직') ? 1 : .5 }}>
@@ -246,19 +239,19 @@ async function send(override, isChoice) {
       </div>
 
       {crisis && (
-        <div style={{ background: 'rgba(139,51,51,.15)', border: '1px solid #8b3333', borderLeft: '3px solid #cc4444', padding: '14px 18px', margin: '8px 0', fontSize: 13, color: '#cc8888', lineHeight: 1.7 }}>
-          ⚠️ 지금 많이 힘드신 것 같아요. 저는 당신 곁에 있습니다.<br />
+        <div style={{ background: 'rgba(139,51,51,.15)', border: '1px solid #8b3333', borderLeft: '3px solid #cc4444', padding: '14px 18px', margin: '4px 0', fontSize: 13, color: '#cc8888', lineHeight: 1.7, flexShrink: 0 }}>
+          ⚠️ 지금 많이 힘드신 것 같아요. 당신 곁에 있습니다.<br />
           자살예방상담전화 1393 (24시간) · 정신건강 위기상담 1577-0199 · 긴급 112 / 119
         </div>
       )}
 
-      <div style={{ borderTop: '1px solid #2a2a26', padding: '12px 0', display: 'flex', gap: 12, alignItems: 'flex-end', position: 'sticky', bottom: 0, background: '#0a0a08', zIndex: 10 }}>
+      <div style={{ borderTop: '1px solid #2a2a26', padding: '10px 0', display: 'flex', gap: 12, alignItems: 'flex-end', position: 'sticky', bottom: 0, background: '#0a0a08', zIndex: 10, flexShrink: 0 }}>
         <div style={{ flex: 1 }}>
           <textarea value={input}
             onChange={e => { setInput(e.target.value); e.target.style.height = ''; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'; }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
             placeholder="폐허 속에서, 당신의 이야기를 전해주세요..." rows={1} disabled={typing}
-            style={{ width: '100%', background: '#1a1a17', border: '1px solid #2a2a26', borderBottom: '2px solid #8a6420', color: '#ddd8cc', padding: '12px 16px', fontFamily: "'Noto Sans KR',sans-serif", fontSize: 14, fontWeight: 300, lineHeight: 1.6, resize: 'none', minHeight: 52, maxHeight: 120, outline: 'none' }} />
+            style={{ width: '100%', background: '#1a1a17', border: '1px solid #2a2a26', borderBottom: '2px solid #8a6420', color: '#ddd8cc', padding: '12px 16px', fontFamily: "'Noto Sans KR',sans-serif", fontSize: 14, fontWeight: 300, lineHeight: 1.6, resize: 'none', minHeight: 48, maxHeight: 120, outline: 'none' }} />
         </div>
         <button onClick={() => send()} disabled={typing || !input.trim()}
           style={{ background: 'transparent', border: '1px solid #8a6420', color: '#c8932a', width: 48, height: 48, cursor: (typing || !input.trim()) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, opacity: (typing || !input.trim()) ? .3 : 1 }}>
