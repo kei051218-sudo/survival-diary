@@ -51,6 +51,8 @@ function buildSystemPrompt(state) {
      * 휴식 취하기 → "잠깐 눈을 감고 세 번 천천히 숨을 쉬어보세요."
    - 위 예시에 없는 행동도 현실의 감각, 몸, 감정과 연결되는 행동으로 창의적으로 변환한다.
    - 현실 행동 제안은 부드럽고 자연스럽게, 강요하지 않는 톤으로.
+9. 항상 3인칭 관찰자 시점을 유지한다. "당신은", "기원은" 처럼 3인칭으로 서술하며, "나는", "저는" 같은 1인칭을 절대 사용하지 않는다.
+10. AI는 생존 보조 시스템처럼 건조하고 관찰적인 톤을 유지하되, 차갑지 않고 따뜻한 온기가 느껴지게 한다.
 
 스토리라인: 1일차(지하실탈출) 2일차(폐허거리) 3일차(무너진다리) 4일차(버려진병원) 5일차(폐허도서관) 6일차(생존자흔적) 7일차(생존자무리)
 항상 한국어, 짧고 명확한 문장.`;
@@ -249,7 +251,7 @@ export default function Home() {
         <div style={{ flex: 1 }}>
           <textarea value={input}
             onChange={e => { setInput(e.target.value); e.target.style.height = ''; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'; }}
-            onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); send(); } }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
             placeholder="폐허 속에서, 당신의 이야기를 전해주세요..." rows={1} disabled={typing}
             style={{ width: '100%', background: '#1a1a17', border: '1px solid #2a2a26', borderBottom: '2px solid #8a6420', color: '#ddd8cc', padding: '12px 16px', fontFamily: "'Noto Sans KR',sans-serif", fontSize: 14, fontWeight: 300, lineHeight: 1.6, resize: 'none', minHeight: 52, maxHeight: 120, outline: 'none' }} />
         </div>
