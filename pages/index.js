@@ -57,6 +57,7 @@ function buildSystemPrompt(state) {
 const CRISIS = ['자살', '자해', '죽고 싶', '끝내고 싶', '살기 싫', '사라지고 싶'];
 
 export default function Home() {
+  const [intro, setIntro] = useState(true);
   const [st, setSt] = useState({
     messages: [], character: { name: '', job: '', survival_reason: '' },
     setupStep: 1, currentDay: 0, stepIndex: 0, totalSteps: 8
@@ -153,6 +154,41 @@ export default function Home() {
   }
 
   const prog = st.currentDay === 0 ? 0 : Math.min(Math.round(((st.currentDay - 1) / 7 + st.stepIndex / (7 * st.totalSteps)) * 100), 100);
+
+  if (intro) {
+    return (<>
+      <Head>
+        <title>생존일기 — 당신은 살아남았다</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet" />
+      </Head>
+      <style jsx global>{`
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+        body{background:#0a0a08;color:#ddd8cc;font-family:'Noto Sans KR',sans-serif;}
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        .intro-img{animation:fadeIn 1.2s ease forwards;}
+        .intro-text{animation:fadeUp 1s ease 0.5s both;}
+        .intro-btn{animation:fadeUp 1s ease 1s both;}
+        .intro-btn:hover{background:rgba(200,147,42,0.15)!important;border-color:#c8932a!important;color:#c8932a!important;}
+      `}</style>
+      <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' }}>
+        <img className="intro-img" src="/survival-diary.png" alt="생존일기" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }} />
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(to bottom, rgba(0,0,0,0) 40%, rgba(10,10,8,0.85) 70%, rgba(10,10,8,1) 100%)' }} />
+        <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 480, padding: '0 24px 60px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <div className="intro-text" style={{ textAlign: 'center' }}>
+            <div style={{ fontFamily: "'Nanum Myeongjo',serif", fontSize: 32, fontWeight: 800, color: '#c8932a', letterSpacing: 4, marginBottom: 8 }}>생존일기</div>
+            <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 12, color: '#7a766c', letterSpacing: 3, marginBottom: 16 }}>SURVIVAL DIARY</div>
+            <div style={{ fontSize: 14, color: '#9a9080', lineHeight: 1.8, fontWeight: 300 }}>당신은 살아남았다.</div>
+          </div>
+          <button className="intro-btn" onClick={() => setIntro(false)}
+            style={{ marginTop: 8, background: 'transparent', border: '1px solid #8a6420', color: '#c8932a', padding: '14px 48px', fontFamily: "'Share Tech Mono',monospace", fontSize: 13, letterSpacing: 3, cursor: 'pointer' }}>
+            START
+          </button>
+        </div>
+      </div>
+    </>);
+  }
 
   return (<>
     <Head>
