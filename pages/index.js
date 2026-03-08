@@ -1,12 +1,38 @@
 import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+async function dbGet(userKey) {
+  const r = await fetch(SUPABASE_URL + '/rest/v1/sessions?user_key=eq.' + userKey + '&limit=1', {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+  });
+  const data = await r.json();
+  return data[0] || null;
+}
+
+async function dbSave(userKey, payload) {
+  const existing = await dbGet(userKey);
+  const body = JSON.stringify({ user_key: userKey, ...payload, updated_at: new Date().toISOString() });
+  if (existing) {
+    await fetch(SUPABASE_URL + '/rest/v1/sessions?user_key=eq.' + userKey, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' }
+      , body
+    });
+  } else {
+    await fetch(SUPABASE_URL + '/rest/v1/sessions', {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body
+    });
+  }
+}
+
 function stripMarkdown(text) {
   const ph = [];
-  text = text.replace(/\[([^\]]{1,30})\]/g, (m, p1) => {
-    ph.push(p1);
-    return '\x00' + (ph.length - 1) + '\x00';
-  });
+  text = text.replace(/\[([^\]]{1,30})\]/g, (m, p1) => { ph.push(p1); return '\x00' + (ph.length - 1) + '\x00'; });
   text = text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*\n]+)\*/g, '$1');
   text = text.replace(/\x00(\d+)\x00/g, (m, i) => '[' + ph[parseInt(i)] + ']');
   return text;
@@ -14,8 +40,7 @@ function stripMarkdown(text) {
 
 function parseChoices(content) {
   const pattern = /\[([^\]]{1,30})\]/g;
-  const choices = [];
-  let m;
+  const choices = []; let m;
   while ((m = pattern.exec(content)) !== null) choices.push(m[1]);
   const clean = content.replace(/\[([^\]]{1,30})\]\s*/g, '').trim();
   return { choices, clean };
@@ -55,36 +80,24 @@ function buildSystemPrompt(state) {
 }
 
 const CRISIS = ['자살', '자해', '죽고 싶', '끝내고 싶', '살기 싫', '사라지고 싶'];
+const INIT_STATE = { messages: [], character: { name: '', job: '', survival_reason: '' }, setupStep: 1, currentDay: 0, stepIndex: 0, totalSteps: 8 };
+const INIT_LOG = [{ role: 'assistant', text: '빛이 꺼진 도시, 희미한 불빛 아래 당신을 만납니다.\n\n생존일기를 시작하기 전에, 먼저 당신이라는 사람을 알고 싶습니다.\n\n당신의 이름은 무엇인가요?', choices: [] }];
 
 export default function Home() {
-  const [intro, setIntro] = useState(true);
-  const [st, setSt] = useState({
-    messages: [], character: { name: '', job: '', survival_reason: '' },
-    setupStep: 1, currentDay: 0, stepIndex: 0, totalSteps: 8
-  });
+  const [screen, setScreen] = useState('intro'); // intro | consent | loading | game
+  const [userKey, setUserKey] = useState(null);
+  const [st, setSt] = useState(INIT_STATE);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
   const [crisis, setCrisis] = useState(false);
-  const [log, setLog] = useState([]);
+  const [log, setLog] = useState(INIT_LOG);
   const endRef = useRef(null);
-
-  useEffect(() => {
-    setLog([{
-      role: 'assistant',
-      text: '빛이 꺼진 도시, 희미한 불빛 아래 당신을 만납니다.\n\n생존일기를 시작하기 전에, 먼저 당신이라는 사람을 알고 싶습니다.\n\n당신의 이름은 무엇인가요?',
-      choices: []
-    }]);
-  }, []);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [log, typing]);
 
   async function callAPI(msg, s) {
     const msgs = [...s.messages, { role: 'user', content: msg }];
-    const r = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: msgs, systemPrompt: buildSystemPrompt(s) })
-    });
+    const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs, systemPrompt: buildSystemPrompt(s) }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
     return { text: d.text, msgs: [...msgs, { role: 'assistant', content: d.text }] };
@@ -92,14 +105,44 @@ export default function Home() {
 
   function parseResp(raw) {
     let text = raw, report = null;
-    if (text.includes('[REPORT]')) {
-      const p = text.split('[REPORT]');
-      text = p[0].trim();
-      try { report = JSON.parse(p[1].trim()); } catch (e) {}
-    }
+    if (text.includes('[REPORT]')) { const p = text.split('[REPORT]'); text = p[0].trim(); try { report = JSON.parse(p[1].trim()); } catch (e) {} }
     text = stripMarkdown(text);
     const { choices, clean } = parseChoices(text);
     return { clean, choices, report };
+  }
+
+  async function saveProgress(newSt, newLog) {
+    if (!userKey) return;
+    try {
+      await dbSave(userKey, {
+        character: newSt.character,
+        messages: newSt.messages,
+        current_day: newSt.currentDay,
+        step_index: newSt.stepIndex,
+        setup_step: newSt.setupStep,
+        log_snapshot: newLog
+      });
+    } catch (e) { console.error('저장 실패:', e); }
+  }
+
+  async function startNew() {
+    let key = localStorage.getItem('sd_user_key');
+    if (!key) { key = crypto.randomUUID(); localStorage.setItem('sd_user_key', key); }
+    setUserKey(key);
+    setScreen('loading');
+    try {
+      const saved = await dbGet(key);
+      if (saved && saved.setup_step >= 4 && saved.log_snapshot && saved.log_snapshot.length > 1) {
+        const restoredSt = { messages: saved.messages || [], character: saved.character || {}, setupStep: saved.setup_step, currentDay: saved.current_day, stepIndex: saved.step_index, totalSteps: 8 };
+        setSt(restoredSt);
+        setLog(saved.log_snapshot);
+        setScreen('game');
+        return;
+      }
+    } catch (e) { console.error('불러오기 실패:', e); }
+    setSt(INIT_STATE);
+    setLog(INIT_LOG);
+    setScreen('game');
   }
 
   async function send(override, isChoice) {
@@ -107,22 +150,20 @@ export default function Home() {
     if (!text || typing) return;
     setInput('');
     if (CRISIS.some(k => text.includes(k))) setCrisis(true);
-    setLog(p => [...p, { role: 'user', text }]);
+    const newLog = [...log, { role: 'user', text }];
+    setLog(newLog);
     setTyping(true);
     const cur = st;
     try {
       if (cur.setupStep < 4) { await setup(text, cur); return; }
-      const apiText = isChoice
-        ? '[선택: ' + text + '] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.'
-        : text;
+      const apiText = isChoice ? '[선택: ' + text + '] 중요: 스토리 전개 전에 반드시 이 선택에 대응하는 현실의 마이크로 액션을 먼저 구체적으로 제안하고, [했어요] / [아직] 으로 확인한 뒤에 스토리를 전개하라.' : text;
       const { text: raw, msgs } = await callAPI(apiText, cur);
       const { clean, choices, report } = parseResp(raw);
       const ns = { ...cur, messages: msgs, stepIndex: Math.min(cur.stepIndex + 1, cur.totalSteps - 1) };
+      const finalLog = [...newLog, { role: 'assistant', text: clean, choices, report: report ? { ...report, character: { ...cur.character } } : null }];
       setSt(ns);
-      setLog(p => [...p, {
-        role: 'assistant', text: clean, choices,
-        report: report ? { ...report, character: { ...cur.character } } : null
-      }]);
+      setLog(finalLog);
+      await saveProgress(ns, finalLog);
     } catch (e) {
       setLog(p => [...p, { role: 'assistant', text: '신호가 끊겼습니다... 잠시 후 다시 시도해주세요.', choices: [] }]);
     } finally { setTyping(false); }
@@ -144,156 +185,98 @@ export default function Home() {
         const { clean, choices } = parseResp(raw);
         ns.messages = msgs;
         msg = { role: 'assistant', text: clean, choices };
-      } catch (e) {
-        msg = { role: 'assistant', text: '캐릭터 생성 완료. 생존일기를 시작합니다...', choices: [] };
-      }
+      } catch (e) { msg = { role: 'assistant', text: '캐릭터 생성 완료. 생존일기를 시작합니다...', choices: [] }; }
     }
     setSt(ns);
-    if (msg) setLog(p => [...p, msg]);
+    const finalLog = [...log, { role: 'user', text: answer }, msg].filter(Boolean);
+    setLog(finalLog);
+    await saveProgress(ns, finalLog);
     setTyping(false);
   }
 
   const prog = st.currentDay === 0 ? 0 : Math.min(Math.round(((st.currentDay - 1) / 7 + st.stepIndex / (7 * st.totalSteps)) * 100), 100);
 
-  if (intro) {
-    return (<>
-      <Head>
-        <title>생존일기 — 당신은 살아남았다</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet" />
-      </Head>
-      <style jsx global>{`
-        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-        body{background:#0a0a08;color:#ddd8cc;font-family:'Noto Sans KR',sans-serif;}
-        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-        .intro-img{animation:fadeIn 1.2s ease forwards;}
-        .intro-text{animation:fadeUp 1s ease 0.5s both;}
-        .intro-btn{animation:fadeUp 1s ease 1s both;}
-        .intro-btn:hover{background:rgba(200,147,42,0.15)!important;border-color:#c8932a!important;color:#c8932a!important;}
-      `}</style>
-      <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' }}>
-        <img className="intro-img" src="/survival-diary.png" alt="생존일기" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }} />
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(to bottom, rgba(0,0,0,0) 40%, rgba(10,10,8,0.85) 70%, rgba(10,10,8,1) 100%)' }} />
-        <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 480, padding: '0 24px 60px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-          <div className="intro-text" style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: "'Nanum Myeongjo',serif", fontSize: 32, fontWeight: 800, color: '#c8932a', letterSpacing: 4, marginBottom: 8 }}>생존일기</div>
-            <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 12, color: '#7a766c', letterSpacing: 3, marginBottom: 16 }}>SURVIVAL DIARY</div>
-            <div style={{ fontSize: 14, color: '#9a9080', lineHeight: 1.8, fontWeight: 300 }}>당신은 살아남았다.</div>
-          </div>
-          <button className="intro-btn" onClick={() => setIntro(false)}
-            style={{ marginTop: 8, background: 'transparent', border: '1px solid #8a6420', color: '#c8932a', padding: '14px 48px', fontFamily: "'Share Tech Mono',monospace", fontSize: 13, letterSpacing: 3, cursor: 'pointer' }}>
-            START
-          </button>
+  // 인트로 화면
+  if (screen === 'intro') return (<>
+    <Head><title>생존일기 — 당신은 살아남았다</title><meta name="viewport" content="width=device-width, initial-scale=1.0" /><link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet" /></Head>
+    <style jsx global>{`*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a08;color:#ddd8cc;font-family:'Noto Sans KR',sans-serif;}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}.intro-img{animation:fadeIn 1.2s ease forwards;}.intro-text{animation:fadeUp 1s ease 0.5s both;}.intro-btn{animation:fadeUp 1s ease 1s both;}.intro-btn:hover{background:rgba(200,147,42,0.15)!important;border-color:#c8932a!important;color:#c8932a!important;}`}</style>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' }}>
+      <img className="intro-img" src="/survival-diary.png" alt="생존일기" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }} />
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(to bottom, rgba(0,0,0,0) 40%, rgba(10,10,8,0.85) 70%, rgba(10,10,8,1) 100%)' }} />
+      <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 480, padding: '0 24px 60px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+        <div className="intro-text" style={{ textAlign: 'center' }}>
+          <div style={{ fontFamily: "'Nanum Myeongjo',serif", fontSize: 32, fontWeight: 800, color: '#c8932a', letterSpacing: 4, marginBottom: 8 }}>생존일기</div>
+          <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 12, color: '#7a766c', letterSpacing: 3, marginBottom: 16 }}>SURVIVAL DIARY</div>
+          <div style={{ fontSize: 14, color: '#9a9080', lineHeight: 1.8, fontWeight: 300 }}>당신은 살아남았다.</div>
+        </div>
+        <button className="intro-btn" onClick={() => setScreen('consent')} style={{ marginTop: 8, background: 'transparent', border: '1px solid #8a6420', color: '#c8932a', padding: '14px 48px', fontFamily: "'Share Tech Mono',monospace", fontSize: 13, letterSpacing: 3, cursor: 'pointer' }}>START</button>
+      </div>
+    </div>
+  </>);
+
+  // 동의 화면
+  if (screen === 'consent') return (<>
+    <Head><title>생존일기 — 당신은 살아남았다</title><meta name="viewport" content="width=device-width, initial-scale=1.0" /><link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet" /></Head>
+    <style jsx global>{`*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a08;color:#ddd8cc;font-family:'Noto Sans KR',sans-serif;}`}</style>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
+      <div style={{ maxWidth: 440, width: '100%' }}>
+        <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, color: '#8a6420', letterSpacing: 3, marginBottom: 24 }}>DATA CONSENT</div>
+        <div style={{ fontFamily: "'Nanum Myeongjo',serif", fontSize: 20, color: '#c8932a', marginBottom: 20, lineHeight: 1.6 }}>이야기를 이어가기 위해<br />기록을 저장해도 될까요?</div>
+        <div style={{ fontSize: 13, color: '#7a766c', lineHeight: 2, marginBottom: 32, borderLeft: '2px solid #3a3020', paddingLeft: 16 }}>
+          · 대화 내용과 캐릭터 정보가 저장됩니다<br />
+          · 다음 접속 시 이어서 진행할 수 있어요<br />
+          · 개인 식별 정보는 수집하지 않습니다<br />
+          · 서비스 개선 목적으로만 활용됩니다
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <button onClick={startNew} style={{ background: 'transparent', border: '1px solid #8a6420', color: '#c8932a', padding: '14px', fontFamily: "'Share Tech Mono',monospace", fontSize: 12, letterSpacing: 2, cursor: 'pointer' }}>동의하고 시작하기</button>
+          <button onClick={() => { setSt(INIT_STATE); setLog(INIT_LOG); setScreen('game'); }} style={{ background: 'transparent', border: '1px solid #3a3020', color: '#7a766c', padding: '12px', fontFamily: "'Share Tech Mono',monospace", fontSize: 11, letterSpacing: 1, cursor: 'pointer' }}>저장 없이 시작하기</button>
         </div>
       </div>
-    </>);
-  }
+    </div>
+  </>);
 
+  // 로딩 화면
+  if (screen === 'loading') return (<>
+    <Head><title>생존일기</title><meta name="viewport" content="width=device-width, initial-scale=1.0" /></Head>
+    <style jsx global>{`*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a08;}@keyframes bl{0%,80%,100%{opacity:.2}40%{opacity:1}}`}</style>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+      <div style={{ display: 'flex', gap: 6 }}>{[0, .2, .4].map((d, i) => <span key={i} style={{ width: 8, height: 8, background: '#8a6420', borderRadius: '50%', animation: 'bl 1.4s ' + d + 's infinite', display: 'block' }} />)}</div>
+      <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, color: '#8a6420', letterSpacing: 2 }}>LOADING...</div>
+    </div>
+  </>);
+
+  // 게임 화면
   return (<>
-    <Head>
-      <title>생존일기 — 당신은 살아남았다</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet" />
-    </Head>
-    <style jsx global>{`
-      *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-      body{background:#0a0a08;color:#ddd8cc;font-family:'Noto Sans KR',sans-serif;min-height:100vh}
-      @keyframes fi{to{opacity:1;transform:translateY(0)}}
-      @keyframes bl{0%,80%,100%{opacity:.2}40%{opacity:1}}
-      .fin{animation:fi .4s ease forwards;opacity:0;transform:translateY(8px)}
-      .cbtn:hover{background:rgba(200,147,42,.1)!important;border-color:#c8932a!important;color:#c8932a!important}
-      textarea:focus{border-bottom-color:#c8932a!important;background:#111110!important}
-      textarea::placeholder{color:#4a4840;font-style:italic}
-      ::-webkit-scrollbar{width:3px}
-      ::-webkit-scrollbar-thumb{background:#3a3020}
-    `}</style>
-
+    <Head><title>생존일기 — 당신은 살아남았다</title><meta name="viewport" content="width=device-width, initial-scale=1.0" /><link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet" /></Head>
+    <style jsx global>{`*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a08;color:#ddd8cc;font-family:'Noto Sans KR',sans-serif;min-height:100vh}@keyframes fi{to{opacity:1;transform:translateY(0)}}@keyframes bl{0%,80%,100%{opacity:.2}40%{opacity:1}}.fin{animation:fi .4s ease forwards;opacity:0;transform:translateY(8px)}.cbtn:hover{background:rgba(200,147,42,.1)!important;border-color:#c8932a!important;color:#c8932a!important}textarea:focus{border-bottom-color:#c8932a!important;background:#111110!important}textarea::placeholder{color:#4a4840;font-style:italic}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#3a3020}`}</style>
     <div style={{ maxWidth: 720, margin: '0 auto', height: '100dvh', display: 'flex', flexDirection: 'column', padding: '0 16px', overflow: 'hidden' }}>
       <header style={{ padding: '28px 0 20px', borderBottom: '1px solid #2a2a26', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <div style={{ fontFamily: "'Nanum Myeongjo',serif", fontSize: 22, fontWeight: 800, color: '#c8932a', letterSpacing: 2 }}>
-          생존일기
-          <span style={{ color: '#7a766c', fontWeight: 400, fontSize: 13, marginLeft: 12, letterSpacing: 1, fontFamily: "'Share Tech Mono',monospace" }}>SURVIVAL DIARY</span>
-        </div>
-        <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, color: '#8a6420', background: 'rgba(200,147,42,.08)', border: '1px solid #3a3020', padding: '4px 10px', letterSpacing: 2 }}>
-          {st.currentDay > 0 ? 'DAY ' + st.currentDay : 'DAY —'}
-        </div>
+        <div style={{ fontFamily: "'Nanum Myeongjo',serif", fontSize: 22, fontWeight: 800, color: '#c8932a', letterSpacing: 2 }}>생존일기<span style={{ color: '#7a766c', fontWeight: 400, fontSize: 13, marginLeft: 12, letterSpacing: 1, fontFamily: "'Share Tech Mono',monospace" }}>SURVIVAL DIARY</span></div>
+        <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, color: '#8a6420', background: 'rgba(200,147,42,.08)', border: '1px solid #3a3020', padding: '4px 10px', letterSpacing: 2 }}>{st.currentDay > 0 ? 'DAY ' + st.currentDay : 'DAY —'}</div>
       </header>
-
-      <div style={{ height: 2, background: '#2a2a26', margin: '0 -16px', overflow: 'hidden', flexShrink: 0 }}>
-        <div style={{ height: '100%', background: 'linear-gradient(90deg,#8a6420,#c8932a)', width: prog + '%', transition: 'width .5s ease' }} />
-      </div>
-
+      <div style={{ height: 2, background: '#2a2a26', margin: '0 -16px', overflow: 'hidden', flexShrink: 0 }}><div style={{ height: '100%', background: 'linear-gradient(90deg,#8a6420,#c8932a)', width: prog + '%', transition: 'width .5s ease' }} /></div>
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '8px', paddingTop: '16px' }}>
         {log.map((m, i) => (
           <div key={i}>
             <div className="fin" style={{ display: 'flex', gap: 14, padding: '12px 0', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
-              <div style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.role === 'user' ? 'rgba(61,110,74,.15)' : 'rgba(200,147,42,.1)', border: '1px solid ' + (m.role === 'user' ? 'rgba(61,110,74,.3)' : '#3a3020'), color: m.role === 'user' ? '#6aaf7a' : '#c8932a', fontFamily: "'Share Tech Mono',monospace", fontSize: 10 }}>
-                {m.role === 'user' ? '나' : 'AI'}
-              </div>
+              <div style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.role === 'user' ? 'rgba(61,110,74,.15)' : 'rgba(200,147,42,.1)', border: '1px solid ' + (m.role === 'user' ? 'rgba(61,110,74,.3)' : '#3a3020'), color: m.role === 'user' ? '#6aaf7a' : '#c8932a', fontFamily: "'Share Tech Mono',monospace", fontSize: 10 }}>{m.role === 'user' ? '나' : 'AI'}</div>
               <div style={{ maxWidth: 'calc(100% - 52px)', padding: '14px 18px', lineHeight: 1.8, fontSize: 15, fontWeight: 300, background: m.role === 'user' ? 'rgba(61,110,74,.1)' : '#1f1f1c', border: '1px solid ' + (m.role === 'user' ? 'rgba(61,110,74,.25)' : '#2a2a26'), borderLeft: m.role === 'user' ? undefined : '2px solid #8a6420', color: m.role === 'user' ? '#a09880' : '#ddd8cc', fontFamily: m.role === 'user' ? undefined : "'Nanum Myeongjo',serif", textAlign: m.role === 'user' ? 'right' : 'left' }}>
                 {m.text.split('\n').map((l, j, a) => <span key={j}>{l}{j < a.length - 1 && <br />}</span>)}
-                {m.hint && (
-                  <span style={{ display: 'block', marginTop: 12, padding: '8px 12px', background: 'rgba(200,147,42,.05)', borderLeft: '2px solid #8a6420', fontSize: 12, color: '#7a766c', lineHeight: 1.8 }}>
-                    <em style={{ color: '#8a6420', fontStyle: 'normal', fontFamily: "'Share Tech Mono',monospace", fontSize: 10, letterSpacing: 1.5, display: 'block', marginBottom: 5 }}>예시</em>
-                    {m.hint.split('\n').map((l, j, a) => <span key={j}>{l}{j < a.length - 1 && <br />}</span>)}
-                  </span>
-                )}
+                {m.hint && <span style={{ display: 'block', marginTop: 12, padding: '8px 12px', background: 'rgba(200,147,42,.05)', borderLeft: '2px solid #8a6420', fontSize: 12, color: '#7a766c', lineHeight: 1.8 }}><em style={{ color: '#8a6420', fontStyle: 'normal', fontFamily: "'Share Tech Mono',monospace", fontSize: 10, letterSpacing: 1.5, display: 'block', marginBottom: 5 }}>예시</em>{m.hint.split('\n').map((l, j, a) => <span key={j}>{l}{j < a.length - 1 && <br />}</span>)}</span>}
               </div>
             </div>
-            {m.choices && m.choices.length > 0 && (
-              <div style={{ padding: '4px 0 12px 46px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {m.choices.map((c, ci) => (
-                  <button key={ci} className="cbtn" onClick={() => send(c, true)} disabled={typing}
-                    style={{ background: (c === '했어요' || c === '아직') ? 'rgba(200,147,42,.06)' : 'transparent', border: '1px solid #3a3020', color: '#8a6420', padding: '8px 16px', fontFamily: (c === '했어요' || c === '아직') ? "'Share Tech Mono',monospace" : "'Nanum Myeongjo',serif", fontSize: (c === '했어요' || c === '아직') ? 12 : 13, cursor: 'pointer', letterSpacing: (c === '했어요' || c === '아직') ? 1 : .5 }}>
-                    {c}
-                  </button>
-                ))}
-              </div>
-            )}
-            {m.report && (
-              <div style={{ margin: '8px 0 8px 46px', background: '#1a1a17', border: '1px solid #3a3020', borderTop: '3px solid #c8932a', padding: '20px 22px' }}>
-                <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, letterSpacing: 3, color: '#c8932a', marginBottom: 16 }}>오늘의 생존일기</div>
-                {[['캐릭터', (m.report.character?.name || '') + ' / ' + (m.report.character?.job || '')], ['생존계기', m.report.character?.survival_reason], ['오늘단계', m.report.step], ['오늘액션', m.report.action], ['실행여부', m.report.done ? '✓ 실행' : '△ 미실행'], ['오늘한줄', '"' + (m.report.one_line || '') + '"'], ['동행코멘트', m.report.coach_note]].map(([lbl, val], ri) => (
-                  <div key={ri} style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '6px 12px', fontSize: 13, padding: '6px 0', borderBottom: '1px solid #2a2a26' }}>
-                    <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, color: '#8a6420', letterSpacing: 1 }}>{lbl}</div>
-                    <div style={{ color: '#e8e0cc', fontFamily: "'Nanum Myeongjo',serif", lineHeight: 1.7 }}>{val || '—'}</div>
-                  </div>
-                ))}
-              </div>
-            )}
+            {m.choices && m.choices.length > 0 && <div style={{ padding: '4px 0 12px 46px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>{m.choices.map((c, ci) => <button key={ci} className="cbtn" onClick={() => send(c, true)} disabled={typing} style={{ background: (c === '했어요' || c === '아직') ? 'rgba(200,147,42,.06)' : 'transparent', border: '1px solid #3a3020', color: '#8a6420', padding: '8px 16px', fontFamily: (c === '했어요' || c === '아직') ? "'Share Tech Mono',monospace" : "'Nanum Myeongjo',serif", fontSize: (c === '했어요' || c === '아직') ? 12 : 13, cursor: 'pointer', letterSpacing: (c === '했어요' || c === '아직') ? 1 : .5 }}>{c}</button>)}</div>}
+            {m.report && <div style={{ margin: '8px 0 8px 46px', background: '#1a1a17', border: '1px solid #3a3020', borderTop: '3px solid #c8932a', padding: '20px 22px' }}><div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, letterSpacing: 3, color: '#c8932a', marginBottom: 16 }}>오늘의 생존일기</div>{[['캐릭터', (m.report.character?.name || '') + ' / ' + (m.report.character?.job || '')], ['생존계기', m.report.character?.survival_reason], ['오늘단계', m.report.step], ['오늘액션', m.report.action], ['실행여부', m.report.done ? '✓ 실행' : '△ 미실행'], ['오늘한줄', '"' + (m.report.one_line || '') + '"'], ['동행코멘트', m.report.coach_note]].map(([lbl, val], ri) => <div key={ri} style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '6px 12px', fontSize: 13, padding: '6px 0', borderBottom: '1px solid #2a2a26' }}><div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, color: '#8a6420', letterSpacing: 1 }}>{lbl}</div><div style={{ color: '#e8e0cc', fontFamily: "'Nanum Myeongjo',serif", lineHeight: 1.7 }}>{val || '—'}</div></div>)}</div>}
           </div>
         ))}
-        {typing && (
-          <div style={{ display: 'flex', gap: 14, padding: '12px 0', alignItems: 'center' }}>
-            <div style={{ width: 32, height: 32, background: 'rgba(200,147,42,.1)', border: '1px solid #3a3020', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c8932a', fontFamily: "'Share Tech Mono',monospace", fontSize: 10, flexShrink: 0 }}>AI</div>
-            <div style={{ display: 'flex', gap: 5, padding: '14px 18px', background: '#1f1f1c', border: '1px solid #2a2a26', borderLeft: '2px solid #8a6420' }}>
-              {[0, .2, .4].map((d, i) => <span key={i} style={{ width: 6, height: 6, background: '#8a6420', borderRadius: '50%', animation: 'bl 1.4s ' + d + 's infinite', display: 'block' }} />)}
-            </div>
-          </div>
-        )}
+        {typing && <div style={{ display: 'flex', gap: 14, padding: '12px 0', alignItems: 'center' }}><div style={{ width: 32, height: 32, background: 'rgba(200,147,42,.1)', border: '1px solid #3a3020', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c8932a', fontFamily: "'Share Tech Mono',monospace", fontSize: 10, flexShrink: 0 }}>AI</div><div style={{ display: 'flex', gap: 5, padding: '14px 18px', background: '#1f1f1c', border: '1px solid #2a2a26', borderLeft: '2px solid #8a6420' }}>{[0, .2, .4].map((d, i) => <span key={i} style={{ width: 6, height: 6, background: '#8a6420', borderRadius: '50%', animation: 'bl 1.4s ' + d + 's infinite', display: 'block' }} />)}</div></div>}
         <div ref={endRef} />
       </div>
-
-      {crisis && (
-        <div style={{ background: 'rgba(139,51,51,.15)', border: '1px solid #8b3333', borderLeft: '3px solid #cc4444', padding: '14px 18px', margin: '4px 0', fontSize: 13, color: '#cc8888', lineHeight: 1.7, flexShrink: 0 }}>
-          ⚠️ 지금 많이 힘드신 것 같아요. 당신 곁에 있습니다.<br />
-          자살예방상담전화 1393 (24시간) · 정신건강 위기상담 1577-0199 · 긴급 112 / 119
-        </div>
-      )}
-
+      {crisis && <div style={{ background: 'rgba(139,51,51,.15)', border: '1px solid #8b3333', borderLeft: '3px solid #cc4444', padding: '14px 18px', margin: '4px 0', fontSize: 13, color: '#cc8888', lineHeight: 1.7, flexShrink: 0 }}>⚠️ 지금 많이 힘드신 것 같아요. 당신 곁에 있습니다.<br />자살예방상담전화 1393 (24시간) · 정신건강 위기상담 1577-0199 · 긴급 112 / 119</div>}
       <div style={{ borderTop: '1px solid #2a2a26', padding: '10px 0', display: 'flex', gap: 12, alignItems: 'flex-end', position: 'sticky', bottom: 0, background: '#0a0a08', zIndex: 10, flexShrink: 0 }}>
-        <div style={{ flex: 1 }}>
-          <textarea value={input}
-            onChange={e => { setInput(e.target.value); e.target.style.height = ''; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'; }}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="폐허 속에서, 당신의 이야기를 전해주세요..." rows={1} disabled={typing}
-            style={{ width: '100%', background: '#1a1a17', border: '1px solid #2a2a26', borderBottom: '2px solid #8a6420', color: '#ddd8cc', padding: '12px 16px', fontFamily: "'Noto Sans KR',sans-serif", fontSize: 14, fontWeight: 300, lineHeight: 1.6, resize: 'none', minHeight: 48, maxHeight: 120, outline: 'none' }} />
-        </div>
-        <button onClick={() => send()} disabled={typing || !input.trim()}
-          style={{ background: 'transparent', border: '1px solid #8a6420', color: '#c8932a', width: 48, height: 48, cursor: (typing || !input.trim()) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, opacity: (typing || !input.trim()) ? .3 : 1 }}>
-          ▶
-        </button>
+        <div style={{ flex: 1 }}><textarea value={input} onChange={e => { setInput(e.target.value); e.target.style.height = ''; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'; }} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="폐허 속에서, 당신의 이야기를 전해주세요..." rows={1} disabled={typing} style={{ width: '100%', background: '#1a1a17', border: '1px solid #2a2a26', borderBottom: '2px solid #8a6420', color: '#ddd8cc', padding: '12px 16px', fontFamily: "'Noto Sans KR',sans-serif", fontSize: 14, fontWeight: 300, lineHeight: 1.6, resize: 'none', minHeight: 48, maxHeight: 120, outline: 'none' }} /></div>
+        <button onClick={() => send()} disabled={typing || !input.trim()} style={{ background: 'transparent', border: '1px solid #8a6420', color: '#c8932a', width: 48, height: 48, cursor: (typing || !input.trim()) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, opacity: (typing || !input.trim()) ? .3 : 1 }}>▶</button>
       </div>
     </div>
   </>);
